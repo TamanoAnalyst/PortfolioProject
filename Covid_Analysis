@@ -1,0 +1,118 @@
+library(tidyverse)
+library(readxl)
+
+df<-covid|>
+  select(location, date, total_cases,new_cases,total_deaths,
+         population)
+ 
+df1<-covid|>
+  select(location, date, total_cases, total_deaths)
+
+
+##Looking at Total Cases vs Total Deaths
+##Shows likelihood of dying if you contract Covid in your country
+
+Result<- df1%>%
+  mutate(death_to_cases_percentage=
+           ifelse(total_cases !=0, total_deaths/total_cases* 100), NA)
+print(Result)
+
+##Showing max percentage for each countries 
+max_percentage_per_location<-Result %>%
+  group_by(location) %>%
+  summarize(max_death_to_cases_percentage= ifelse(all(is.na(
+    death_to_cases_percentage)), NA, 
+    max(death_to_cases_percentage, na.rm = TRUE)))
+
+summary(max_percentage_per_location)
+
+
+##Looking at Total Cases vs Population
+##Shows what percentage of population got Covid
+
+df2<-covid|>
+  select(location, date, population, total_cases)
+
+Result2<- df2%>%
+  mutate(totalcase_to_popultaion_percentage=
+           ifelse(total_cases !=0, total_cases/population), NA)
+print(Result)
+
+##Looking at Countries with Highest Infection Rate compared to population
+
+df3<-Result2|>
+  select(location,population,total_cases, 
+         totalcase_to_popultaion_percentage)
+
+result3 <- df3 %>%
+  group_by(location, population) %>%
+  summarise(
+    HighestInfectionCount = max(total_cases, na.rm = TRUE),
+    PercentPopulationInfected =max(totalcase_to_popultaion_percentage*100, na.rm = TRUE))%>%
+  arrange(desc(PercentPopulationInfected))
+
+##Showing Countries with Highest Death Count per population
+
+result4 <-covid %>%
+  filter(!is.na(continent)) %>%  # Filtering based on Location containing 'states' and continent is not null
+  group_by(location) %>%
+  summarise(
+    TotalDeathCount = max(as.integer(total_deaths), na.rm = TRUE)
+  ) %>%
+  arrange(desc(TotalDeathCount))
+
+##Breaking by continent
+##Showing continents with Highest Death Count per population
+result5 <-covid %>%
+  filter(!is.na(continent))%>%
+  group_by(continent) %>%
+  summarise(
+    TotalDeathCount = max(as.integer(total_deaths), na.rm = TRUE)
+  ) %>%
+  arrange(desc(TotalDeathCount))
+
+##Global numbers 
+
+result6 <- covid %>%
+  filter(!is.na(continent)) %>%  # Filtering where continent is not null
+  group_by(date) %>%
+  summarise(
+    total_cases = sum(new_cases, na.rm = TRUE),
+    total_deaths = sum(as.integer(new_deaths), na.rm = TRUE),
+    DeathPercentage = sum(as.integer(new_deaths), na.rm = TRUE) / sum(new_cases, na.rm = TRUE) * 100
+  ) %>%
+  arrange(total_cases, total_deaths)
+
+
+##Looking at Total Population vs Vaccinations 
+death<-covid
+vacci<-covid_death2
+
+df4<-cbind(death,vacci)
+
+
+library(dplyr)
+
+result7 <- death%>%
+  inner_join(vacci, by = c("location", "date")) %>%
+  filter(!is.na(continent.x)) %>%
+  arrange(location, date) %>%
+  select(continent.x, location, date, population, new_vaccinations)%>%
+  group_by(location) %>% 
+  mutate(new_vaccinations=as.numeric(new_vaccinations),
+         new_vaccinations = ifelse(is.na(new_vaccinations), 0, new_vaccinations),
+         RollingPeopleVaccinated = cumsum(new_vaccinations))
+  
+
+result7 <- result7 %>%
+  mutate(PercentageVaccinated = (RollingPeopleVaccinated / population) * 100)
+
+
+result_list <- list(Result, Result2, result3, result4, result5, result6, result7)
+combined_result <- bind_rows(result_list)
+
+
+install.packages("openxlsx")
+library(openxlsx)
+
+write.xlsx(combined_result, "output_file_Combined_Covid.xlsx", rowNames = FALSE)
